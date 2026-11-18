@@ -180,7 +180,7 @@ def respond_to_connexion_request(key):
 
 #result = ""
 #while result == "":
-    result = respond_to_connexion_request(key)
+    #result = respond_to_connexion_request(key)
 #display.scroll(result,delay=300, loop=True)
 
 def main():
