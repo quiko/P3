@@ -7,25 +7,22 @@
 
 import radio
 from microbit import *
-
-
-class Message:
-    def __init__(self, s) -> None:
-        self.string = s
-
+from g18_radio_module import Message
 
 radio.config(channel=18, group=18)
 
 radio.on()
 
-message = "GOOD INFORMATION"
+Message.set_key("super secret key")
 
 condition = False
 
 while not condition:
-    radio.send(message)
+    message = Message("GOOD INFORMATION", "info")
+    message.send()
     try:
-        if int(str(radio.receive())) == 1:
+        packet = Message.receive()
+        if int(packet.message_content) == 1:
             condition = True
     except:
         condition = False

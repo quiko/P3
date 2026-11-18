@@ -7,31 +7,26 @@
 
 import radio
 from microbit import *
+from g18_radio_module import Message
 
 radio.config(channel=18, group=18)
 
 radio.on()
 
-
-def xor_crypt(data, key):
-    if isinstance(data, str):
-        data = data.encode("utf-8")
-    if isinstance(key, str):
-        key = key.encode("utf-8")
-    return bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
-
-
-key = "secret"
-
-message = "GOOD INFORMATION"
+Message.set_key("super secret key")
 
 condition = False
 
 while not condition:
+    message = "GOOD INFORMATION"
     # if message == xor_crypt(radio.receive(), key).decode("utf-8"):
-    if message == radio.receive():
-        condition = True
-        radio.send("1")
+    try:
+        packet = Message.receive()
+        if message == packet.message_content:
+            condition = True
+            confirmation = Message("1", "1")
+    except:
+        condition = False
     if not condition:
         display.show(Image("90009:09090:00900:09090:90009"))
     else:
