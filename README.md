@@ -1,4 +1,10 @@
 # P3
 Repo pour projet 3 : Programmation micro:bit
-matteo-unif: Matteo
-Jeremie3112: Jérémie
+
+# Équipe
+
+matteo-unif: Matteo Franzoni
+
+Jeremie3112: Jérémie Steelandt
+
+Quiko: Hasnaa Oulad Chouiayakh
