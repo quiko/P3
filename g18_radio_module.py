@@ -1,31 +1,25 @@
-import radio
+#  ___        __
+# /\_ \    __/\ \
+# \//\ \  /\_\ \ \____  _ __    __     _ __   __  __
+#   \ \ \ \/\ \ \ '__`\/\`'__\/'__`\  /\`'__\/\ \/\ \
+#    \_\ \_\ \ \ \ \L\ \ \ \//\ \L\.\_\ \ \/ \ \ \_\ \
+#    /\____\\ \_\ \_,__/\ \_\\ \__/.\_\\ \_\  \/`____ \
+#    \/____/ \/_/\/___/  \/_/ \/__/\/_/ \/_/   `/___/> \
+#                                                 /\___/
+#                                                 \/__/
+
+
 import random
+
+import radio
 
 
 def hashing(string):
-    """
-    Hachage d'une chaîne de caractères fournie en paramètre.
-    Le résultat est une chaîne de caractères.
-    Attention : cette technique de hachage n'est pas suffisante (hachage dit cryptographique) pour une utilisation en dehors du cours.
-
-    :param (str) string: la chaîne de caractères à hacher
-    :return (str): le résultat du hachage
-    """
-
     def to_32(value):
-        """
-        Fonction interne utilisée par hashing.
-        Convertit une valeur en un entier signé de 32 bits.
-        Si 'value' est un entier plus grand que 2 ** 31, il sera tronqué.
-
-        :param (int) value: valeur du caractère transformé par la valeur de hachage de cette itération
-        :return (int): entier signé de 32 bits représentant 'value'
-        """
         value = value % (2**32)
         if value >= 2**31:
             value = value - 2**32
-        value = int(value)
-        return value
+        return int(value)
 
     if string:
         x = ord(string[0]) << 7
@@ -39,99 +33,128 @@ def hashing(string):
     return ""
 
 
+def vigenere(message, key, decryption=False):
+    text = ""
+    key_length = len(key)
+    key_as_int = [ord(k) for k in key]
+
+    for i, char in enumerate(str(message)):
+        key_index = i % key_length
+        if char.isalpha():
+            if decryption:
+                modified_char = chr(
+                    (ord(char.upper()) - key_as_int[key_index] + 26) % 26 + ord("A")
+                )
+            else:
+                modified_char = chr(
+                    (ord(char.upper()) + key_as_int[key_index] - 26) % 26 + ord("A")
+                )
+            if char.islower():
+                modified_char = modified_char.lower()
+            text += modified_char
+        elif char.isdigit():
+            if decryption:
+                modified_char = str((int(char) - key_as_int[key_index]) % 10)
+            else:
+                modified_char = str((int(char) + key_as_int[key_index]) % 10)
+            text += modified_char
+        else:
+            text += char
+    return text
+
+
 class Message:
     _key = None
-    _nonce = []
+    _seen_nonces = set()
+    _send_counter = 0
 
     @classmethod
     def set_key(cls, key):
+        if not key:
+            raise ValueError("key must be non-empty")
         cls._key = key
 
-    def __init__(self, m, t) -> None:
-        self.message_content = m
-        self.message_type = t
+    @classmethod
+    def establish_connection(cls, is_child):
+        if cls._key is None:
+            return False
+        if is_child:
+            # on genere un seed et on l'envois encrypté avec la clé de base
+            seed = random.randint(0, 2**30 - 1)
+            Message(str(seed), 0x01).send()
+            # on recois le messge de confirmation
+            reply = Message.receive()
+            # on check bien que c'est une réponse que l'on veux
+            if reply is None or reply.type != 0x01:
+                return False
+            # on set le seed avec la valeur généré a la base
+            random.seed(seed)
+            # on génère un nouveaux nombre basé sur la seed
+            c_p = random.randint(0, 2**30 - 1)
+            # on check que la reponse avait le bon hash
+            if reply.content != hashing(str(c_p)):
+                return False
+            # On modifie la key avec le nombre
+            cls._key = cls._key + str(c_p)
+            return True
+        else:
+            msg = Message.receive()
+            if msg is None or msg.type != 0x01:
+                return False
+            try:
+                seed = int(msg.content)
+            except ValueError:
+                return False
+            random.seed(seed)
+            c_p = random.randint(0, 2**30 - 1)
+            Message(hashing(str(c_p)), 0x01).send()
+            cls._key = cls._key + str(c_p)
+            return True
+
+    def __init__(self, content, mtype):
+        self.content = content
+        self.type = mtype
 
     def send(self):
-        nonce = random.randint(000, 999)
-
-        packet = "{}|{}|{}:{}".format(  # noqa: UP032
-            self.message_type,
-            len(self.message_content) + len(str(nonce)),
-            nonce,
-            self.message_content,
-        )
-        radio.send(packet)
-        h = hashing(packet)
-        while Message.receive() != (0x02, h):
-            radio.send(packet)
-
-    def send_raw(self):
-        nonce = random.randint(000, 999)
-
-        packet = "{}|{}|{}:{}".format(  # noqa: UP032
-            self.message_type,
-            len(self.message_content) + len(str(nonce)),
-            nonce,
-            self.message_content,
-        )
-        radio.send(packet)
-
-    def send_chalenge(self, cls):
-        seed = random.randint(00000, 99999)
-        random.seed(seed)
-        Message(seed, 0x01).send()
-        h = hashing(random.randint(0000, 1111))
-        chalenge_response = cls.receive_raw()
-        return chalenge_response == (h, 1)
+        if Message._key is None:
+            return False
+        Message._send_counter += 1
+        nonce = Message._send_counter
+        plaintext = "{}:{}".format(nonce, self.content)  # noqa: UP032
+        ciphertext = vigenere(plaintext, Message._key)
+        radio.send("{}|{}|{}".format(self.type, len(plaintext), ciphertext))  # noqa: UP032
+        return True
 
     @classmethod
     def receive(cls):
-        key = cls._key
-        if key is None:
+        if cls._key is None:
             return None
-
         packet = radio.receive()
-
         if packet is None:
             return None
 
         try:
-            message_type, length, content = packet.split("|", 2)
-            packet_nonce, message = content.split(":")
-            message_type = int(message_type)
-        except ValueError:
+            mtype_str, length_str, ciphertext = packet.split("|", 2)
+            mtype = int(mtype_str)
+            length = int(length_str)
+        except (ValueError, TypeError):
             return None
 
-        if packet_nonce in cls._nonce:
-            return None
-        else:
-            cls._nonce.append(packet_nonce)
-            confirmation_message = cls(hashing(message), message_type)
-            confirmation_message.send_raw()
+        plaintext = vigenere(ciphertext, cls._key, decryption=True)
 
-        return cls(message, message_type)
+        if len(plaintext) != length or ":" not in plaintext:
+            return None
+
+        nonce, content = plaintext.split(":", 1)
+        if nonce in cls._seen_nonces:
+            return None
+        cls._seen_nonces.add(nonce)
+        return cls(content, mtype)
 
     @classmethod
-    def receive_raw(cls):
-        key = cls._key
-        if key is None:
-            return None
-
-        packet = radio.receive()
-
-        if packet is None:
-            return None
-
-        try:
-            message_type, length, content = packet.split("|", 2)
-            packet_nonce, message = content.split(":")
-            message_type = int(message_type)
-        except ValueError:
-            return None
-
-        if packet_nonce in cls._nonce:
-            return None
-        else:
-            cls._nonce.append(packet_nonce)
-
-        return cls(message, message_type)
+    def reset(cls):
+        """Wipe session state — simulator / unit tests only."""
+        cls._key = None
+        cls._password = None
+        cls._seen_nonces.clear()
+        cls._send_counter = 0
