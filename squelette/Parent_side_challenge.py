@@ -90,6 +90,14 @@ def send_packet(key, type, content):
            (str) content:   Données à envoyer
 	:return none
     """
+    # construire le packet 
+    packet = type +":" +str(len(content))+":" + content
+        
+    # Chiffrer le packet 
+    encrypted_packet = vigenere(packet, key)
+        
+    # envoyer le packet 
+    radio.send(encrypted_packet)
 
 #Unpack the packet, check the validity and return the type, length and content
 def unpack_data(encrypted_packet, key):
@@ -103,6 +111,10 @@ def unpack_data(encrypted_packet, key):
             (int)length:           Longueur de la donnée en caractères
             (str) message:         Données reçue
     """
+    data = vigenere(encrypted_packet, key, decryption=True)
+    split_data = data.split(":", 2)
+    convert_length = int(split_data[1])
+    return split_data[0], convert_length, split_data[2]
 
 def receive_packet(packet_received, key):
     """
@@ -116,6 +128,20 @@ def receive_packet(packet_received, key):
             (int)lenght:           Longueur de la donnée en caractère
             (str) message:         Données reçue
     """
+    if packet_received == "" or packet_received == None:
+        return "", 0, ""
+    try:
+        # deballer le paquet reçu avec unpack_data
+        type, length, message = unpack_data(packet_received, key)
+    except:
+        # retourner des valeurs vides si une erreur survient
+        return "", 0, ""
+    
+    # si legnth du message ne correspond pas à la longueur indiquée, on retourne des valeurs vides
+    if length != len(message):
+        return "", 0, ""
+    # Sinon , on retourne les valeurs du paquet
+    return type, length, message
 
 #Calculate the challenge response
 def calculate_challenge_response(challenge):
@@ -125,6 +151,8 @@ def calculate_challenge_response(challenge):
     :param (str) challenge:            Challenge reçu
 	:return (srt)challenge_response:   Réponse au challenge
     """
+    challenge_response = hashing(str(challenge))
+    return challenge_response
 
 #Respond to a connexion request by sending the hash value of the number received
 def respond_to_connexion_request(key):
@@ -135,5 +163,26 @@ def respond_to_connexion_request(key):
     :param (str) key:                   Clé de chiffrement
 	:return (srt) challenge_response:   Réponse au challenge
     """
+    # attendre un challenge
+    end_time = running_time() + 10000  # 10 secondes
+    while running_time() < end_time:
+        packet_received = radio.receive()
+        if packet_received:
+           type, length, message = receive_packet(packet_received, key)
+           if type == "challenge" and length == len(message):
+                challenge_response = calculate_challenge_response(message)
+                send_packet(key, "chal_res", challenge_response)
+                return challenge_response
+            
+        sleep(100)  # dors un peu pour ne pas attendre trop de messages
+    return ""
+
+
+#result = ""
+#while result == "":
+    #result = respond_to_connexion_request(key)
+#display.scroll(result,delay=300, loop=True)
 
 def main():
+    while True:
+        pass
