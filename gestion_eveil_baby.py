@@ -24,7 +24,7 @@ tune = [
 
 # ----- SEUILS ISSUS DELA MESURE DE L'ACCELEROMETRE ( voire fichiers de mesurements ) -----
 
-SEUIL_AGITE = 80
+SEUIL_AGITE = 200
 SEUIL_TRES_AGITE = 900
 TAILLE_FENETRE = 10    # 10 mesures x 100 ms = 1 seconde
 
@@ -44,6 +44,14 @@ while True:
     # calcul de la variation d'acceleration
     variation = abs(x - x_prec) + abs(y - y_prec) + abs(z - z_prec)
     x_prec, y_prec, z_prec = x, y, z
+
+    # en cas de chute , alerte immédiate
+    if accelerometer.was_gesture('freefall'):
+        for _ in range(2):
+            Message("chute", TYPE_MESSAGE).send()
+            sleep(50)
+                  
+        dernier_envoi = running_time() 
 
     # ajout de la variation dans l'historique
     historique.append(variation)
